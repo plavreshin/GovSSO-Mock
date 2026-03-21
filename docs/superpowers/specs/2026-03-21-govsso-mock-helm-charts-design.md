@@ -11,11 +11,11 @@ GovSSO-Mock is a stateless Go application that implements the GovSSO protocol fo
 
 - Serves HTTPS **only** on port 10443 (no plain HTTP mode)
 - Stores all state in memory (no database, no disk writes)
-- Requires three config JSON files: `config.json`, `users.json`, `clients.json`
+- Reads config from three JSON files: `config.json`, `users.json`, `clients.json` — resolved relative to the working directory `/govsso-mock` (set by `WORKDIR` in the Dockerfile)
 - Requires a TLS certificate + private key (for serving HTTPS)
 - Requires an RSA key pair (for signing ID tokens and Logout tokens)
 - Logs to stdout only
-- Runs as a distroless container
+- Runs as a distroless container (`gcr.io/distroless/base-nossl-debian12`, non-`nonroot` variant)
 
 The existing deployment mechanism is Docker Compose. This design adds Helm charts for Kubernetes deployment.
 
@@ -25,7 +25,7 @@ The existing deployment mechanism is Docker Compose. This design adds Helm chart
 
 - Deploy GovSSO-Mock to Kubernetes via Helm
 - Follow Bitnami chart conventions and use `bitnami/common` library
-- Charts live inside the GovSSO-Mock repository at `charts/govsso-mock/`
+- Charts live inside the repo at `charts/govsso-mock/`
 - Optionally deploy the example client (`tara-govsso-exampleclient`) as a toggleable subchart
 - TLS certs and signing keys are provisioned externally and referenced as existing Kubernetes Secrets
 - No default image repository (must be set at install time)
@@ -34,8 +34,10 @@ The existing deployment mechanism is Docker Compose. This design adds Helm chart
 
 - cert-manager integration
 - Ingress TLS termination (app cannot run over plain HTTP)
-- Horizontal Pod Autoscaling (stateless but single-replica is fine for dev/test)
-- Helm chart publishing to a chart repository
+- Horizontal Pod Autoscaler (dev/test tool; single replica is appropriate)
+- NetworkPolicy (cluster network topology is environment-specific and cannot be defaulted)
+- PodDisruptionBudget
+- Publishing chart to OCI or traditional chart repository
 
 ---
 
@@ -49,7 +51,7 @@ The `bitnami/common` library provides:
 - `common.tplvalues.render` — template value rendering with `tpl` support
 - `common.capabilities.*` — k8s API version negotiation
 
-This avoids boilerplate for security contexts, probes, affinity, tolerations, and resource limits while staying aligned with the Bitnami superset chart pattern referenced in the requirements.
+This avoids boilerplate for security contexts, probes, affinity, tolerations, and resource limits while staying aligned with the Bitnami superset chart pattern.
 
 ---
 
@@ -63,7 +65,7 @@ charts/
     ├── values.schema.json           # JSON Schema: enforces required fields
     ├── templates/
     │   ├── _helpers.tpl             # named templates using common.* helpers
-    │   ├── NOTES.txt                # post-install instructions
+    │   ├── NOTES.txt                # post-install instructions with exact secret key names
     │   ├── deployment.yaml          # main app Deployment
     │   ├── service.yaml             # ClusterIP Service on port 10443
     │   ├── serviceaccount.yaml      # optional ServiceAccount
@@ -72,9 +74,10 @@ charts/
         └── example-client/          # optional subchart
             ├── Chart.yaml
             ├── values.yaml
-            └── templates/
-                ├── deployment.yaml
-                └── service.yaml
+            ├── templates/
+            │   ├── _helpers.tpl     # subchart label helpers
+            │   ├── deployment.yaml
+            │   └── service.yaml
 ```
 
 ---
@@ -86,6 +89,7 @@ charts/
 image:
   repository: ""
   tag: ""
+  digest: ""              # alternative to tag, takes precedence if set
   pullPolicy: IfNotPresent
   pullSecrets: []
 
@@ -101,10 +105,12 @@ users: []       # array of user objects → users.json
 clients: []     # array of client objects → clients.json
 
 ## Secrets — must be created externally before helm install
+## tls.existingSecret must contain keys: tls.crt, tls.key
+## idToken.existingSecret must contain keys: id-token-sign.key.pem, id-token-sign.pub.pem
 tls:
-  existingSecret: ""        # keys: tls.crt, tls.key
+  existingSecret: ""
 idToken:
-  existingSecret: ""        # keys: id-token-sign.key.pem, id-token-sign.pub.pem
+  existingSecret: ""
 
 ## Standard Bitnami deployment knobs
 replicaCount: 1
@@ -115,24 +121,34 @@ serviceAccount:
 service:
   type: ClusterIP
   port: 10443
+  targetPort: https       # must match the named port in the Deployment container spec
 resources: {}
 podSecurityContext:
   enabled: true
   fsGroup: 1001
 containerSecurityContext:
   enabled: true
+  ## Note: distroless/base-nossl-debian12 (non-nonroot) does not provision UID 1001.
+  ## Any non-zero UID is acceptable since the binary does not require a specific UID.
   runAsUser: 1001
   runAsNonRoot: true
   readOnlyRootFilesystem: true
   allowPrivilegeEscalation: false
 livenessProbe:
   enabled: true
+  ## The app has no dedicated health endpoint; "/" (home page, HTTP 200) is used.
   initialDelaySeconds: 10
   periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
 readinessProbe:
   enabled: true
   initialDelaySeconds: 5
   periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+  successThreshold: 1
 nodeSelector: {}
 tolerations: []
 affinity: {}
@@ -146,15 +162,25 @@ exampleClient:
   image:
     repository: ghcr.io/e-gov/tara-govsso-exampleclient
     tag: "0.7.3"
+    digest: ""
     pullPolicy: IfNotPresent
   clientId: "example-client-id"
+  ## clientSecret: provide inline (dev) or via existingSecret (production)
   clientSecret: ""
-  existingSecret: ""          # alternative: Secret with key client-secret
+  existingSecret: ""          # Secret key: client-secret
   govSsoIssuerUri: ""
   redirectUri: ""
   postLogoutRedirectUri: ""
+  ## tls.existingSecret must contain keys: keystore.p12 and truststore.p12
+  ## keystorePassword and truststorePassword are separate configurable values.
   tls:
-    existingSecret: ""        # keys: keystore.p12, truststore.p12
+    existingSecret: ""
+    keystorePassword: "changeit"
+    truststorePassword: "changeit"
+  ## Spring profile — must be "govsso" for the example client to activate GovSSO configuration
+  springProfile: "govsso"
+  messagesTitle: "GovSSO Client"
+  jvmThreadCount: "10"
   service:
     type: ClusterIP
     port: 11443
@@ -177,7 +203,8 @@ Renders three ConfigMap keys:
 
 Mounted read-only at `/govsso-mock/config/`.
 
-The `config.json` paths are hardcoded to match mount points:
+The `config.json` paths are hardcoded to match mount points. The app resolves all paths relative to its working directory `/govsso-mock` (set by `WORKDIR` in the Dockerfile — this must never be overridden in the Deployment's `workingDir` field):
+
 ```json
 {
   "tlsCertificate": "config/tls/govsso-mock/tls.crt",
@@ -197,76 +224,115 @@ Single container with three volume mounts:
 | `tls` | Secret (`tls.existingSecret`) | `/govsso-mock/config/tls/govsso-mock/` |
 | `id-token` | Secret (`idToken.existingSecret`) | `/govsso-mock/config/id-token/` |
 
-- Image rendered via `common.images.image`
-- Named port `https` on 10443
+- Image rendered via `common.images.image` (supports both `tag` and `digest`)
+- `imagePullSecrets` wired from `image.pullSecrets` via `common.images.pullSecrets`
+- Named port `https` on 10443 — Service `targetPort: https` references this name
 - `readOnlyRootFilesystem: true` is safe — the app writes nothing to disk
-- Liveness/readiness: HTTPS GET on port 10443, path `/`, `httpGet` with scheme `HTTPS`
+- `workingDir` must NOT be set (must inherit the Dockerfile `WORKDIR /govsso-mock`)
+- Liveness/readiness: HTTPS GET on port 10443, path `/`, scheme `HTTPS`
+  - The app has no dedicated health endpoint; `/` renders the home page (HTTP 200) and is the only viable probe path
+- All probe fields included: `initialDelaySeconds`, `periodSeconds`, `timeoutSeconds`, `failureThreshold`, `successThreshold`
 - Security context applied via Bitnami pattern with `enabled` flag guards
 
 ### `service.yaml`
 
-ClusterIP service, port 10443, named `https`, targeting pod port `https`.
+ClusterIP service, port 10443, named `https`. `targetPort: https` references the named port in the Deployment container spec — the linkage is by name, not number, ensuring consistency if the port number changes.
+
+### `_helpers.tpl` (main chart)
+
+Extends `bitnami/common` with chart-specific helpers:
+- `govsso-mock.fullname` — release-prefixed name
+- `govsso-mock.labels` — wraps `common.labels`
+- `govsso-mock.matchLabels` — wraps `common.matchLabels`
+- `govsso-mock.serviceAccountName` — conditional SA name resolution
 
 ### `example-client` subchart
 
-Mirrors docker-compose environment variables as container env vars. Key env vars:
+#### `_helpers.tpl`
 
-- `govsso.client-id` ← `exampleClient.clientId`
-- `govsso.client-secret` ← from Secret or inline value
-- `govsso.issuer-uri` ← `exampleClient.govSsoIssuerUri`
-- `govsso.redirect-uri` ← `exampleClient.redirectUri`
-- `govsso.post-logout-redirect-uri` ← `exampleClient.postLogoutRedirectUri`
-- `govsso.trust-store` ← path to mounted truststore
-- `server.ssl.key-store` ← path to mounted keystore
+Provides subchart-scoped label helpers using the subchart's own release context:
+- `example-client.fullname`
+- `example-client.labels`
+- `example-client.matchLabels`
 
-TLS secret mounted at `/var/local/config/tls/`.
+#### `deployment.yaml` — environment variables
+
+All env vars from docker-compose are represented:
+
+| Env var | Source |
+|---------|--------|
+| `server.port` | `11443` (hardcoded, matches `service.port`) |
+| `govsso.client-id` | `exampleClient.clientId` |
+| `govsso.client-secret` | From `existingSecret` key `client-secret`, or inline `clientSecret` |
+| `govsso.redirect-uri` | `exampleClient.redirectUri` |
+| `govsso.post-logout-redirect-uri` | `exampleClient.postLogoutRedirectUri` |
+| `govsso.issuer-uri` | `exampleClient.govSsoIssuerUri` |
+| `govsso.trust-store` | `file:/var/local/config/tls/truststore.p12` |
+| `govsso.trust-store-password` | `exampleClient.tls.truststorePassword` |
+| `server.ssl.key-store` | `file:/var/local/config/tls/keystore.p12` |
+| `server.ssl.key-store-type` | `PKCS12` (hardcoded) |
+| `server.ssl.key-store-password` | `exampleClient.tls.keystorePassword` |
+| `SPRING_PROFILES_ACTIVE` | `exampleClient.springProfile` (default: `"govsso"`) |
+| `example-client.messages.title` | `exampleClient.messagesTitle` |
+| `BPL_JVM_THREAD_COUNT` | `exampleClient.jvmThreadCount` |
+
+TLS secret mounted at `/var/local/config/tls/` (keys: `keystore.p12`, `truststore.p12`).
 
 ### `values.schema.json`
 
 Enforces at `helm install` / `helm upgrade` time:
-- `tls.existingSecret` — non-empty string, required
-- `idToken.existingSecret` — non-empty string, required
-- `image.repository` — non-empty string, required
-- `image.tag` — non-empty string, required
-- When `exampleClient.enabled=true`: `exampleClient.govSsoIssuerUri`, `exampleClient.tls.existingSecret` are required
+
+**Always required:**
+- `image.repository` — non-empty string
+- `image.tag` — non-empty string (required unless `image.digest` is set; schema enforces at least one)
+- `tls.existingSecret` — non-empty string
+- `idToken.existingSecret` — non-empty string
+
+**Required when `exampleClient.enabled=true`:**
+- `exampleClient.govSsoIssuerUri` — non-empty string
+- `exampleClient.tls.existingSecret` — non-empty string
+- `exampleClient.clientId` — non-empty string
+- `exampleClient.redirectUri` — non-empty string
+- `exampleClient.postLogoutRedirectUri` — non-empty string
 
 ### `NOTES.txt`
 
 Post-install message showing:
 - The mock's HTTPS Service address
-- Reminder that `tls.existingSecret` and `idToken.existingSecret` must contain valid PEM-encoded material
-- When example client is enabled: its Service address and reminder about keystore/truststore secrets
+- Required Secret formats:
+
+```
+tls.existingSecret must be a TLS Secret with keys:
+  tls.crt  — PEM-encoded TLS certificate
+  tls.key  — PEM-encoded TLS private key
+
+idToken.existingSecret must be a generic Secret with keys:
+  id-token-sign.key.pem  — PEM-encoded RSA private key (for signing)
+  id-token-sign.pub.pem  — PEM-encoded RSA public key (served at JWKS endpoint)
+```
+
+- When example client is enabled: its Service address, reminder about keystore/truststore secrets with key names `keystore.p12` and `truststore.p12`
 
 ---
 
 ## Security Considerations
 
 - `readOnlyRootFilesystem: true` — safe, app writes nothing to disk
-- `runAsNonRoot: true` + `runAsUser: 1001` — matches distroless non-root user
+- `runAsNonRoot: true` + `runAsUser: 1001` — the distroless base image (non-`nonroot` variant) does not provision UID 1001, but any non-zero UID is acceptable since the binary does not require a specific UID; this satisfies the `runAsNonRoot` constraint
 - `allowPrivilegeEscalation: false` — no privilege escalation needed
-- Secrets are never rendered into ConfigMaps — only referenced by name
+- `fsGroup: 1001` — included for consistency with Bitnami convention; functionally unnecessary since `readOnlyRootFilesystem: true` and no writable volume mounts exist
+- Secrets are never rendered into ConfigMaps — only referenced by name via `existingSecret` pattern
 - Client secret for example client supports both inline value (dev convenience) and `existingSecret` (production)
+- `imagePullSecrets` wired from `image.pullSecrets`
 
 ---
 
 ## Bitnami Conventions Followed
 
 - `bitnami/common` library dependency in `Chart.yaml`
-- `values.yaml` structure mirrors bitnami/superset: image block, security contexts with `enabled` guards, probe blocks with `enabled` guards, `extraEnv`, `extraVolumes`, `extraVolumeMounts`
-- `values.schema.json` for input validation
+- `values.yaml` structure mirrors bitnami/superset: image block with `digest` field, security contexts with `enabled` guards, probe blocks with all fields, `extraEnv`, `extraVolumes`, `extraVolumeMounts`
+- `values.schema.json` for input validation including conditional subchart requirements
 - Labels use `common.labels` and `common.matchLabels`
-- `_helpers.tpl` extends common helpers with chart-specific named templates
-- `NOTES.txt` provides actionable post-install instructions
-
----
-
-## Out of Scope
-
-The following are explicitly excluded from this design:
-
-- Generating TLS certificates or RSA key pairs (use external tooling)
-- Ingress resource (app serves HTTPS directly; ingress passthrough is cluster-specific)
-- HorizontalPodAutoscaler (dev/test tool, single replica is appropriate)
-- NetworkPolicy
-- PodDisruptionBudget
-- Publishing chart to OCI or traditional chart repository
+- `_helpers.tpl` in both main chart and subchart
+- `NOTES.txt` provides actionable post-install instructions with exact secret key names
+- Service `targetPort` uses named port reference for maintainability
