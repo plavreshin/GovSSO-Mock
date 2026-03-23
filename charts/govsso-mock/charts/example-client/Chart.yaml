@@ -1,0 +1,6 @@
+apiVersion: v2
+name: example-client
+description: Optional example client for demonstrating GovSSO authentication flows
+type: application
+version: 0.1.0
+appVersion: "0.7.3"

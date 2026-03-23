@@ -1,0 +1,9 @@
+dependencies:
+- name: common
+  repository: oci://registry-1.docker.io/bitnamicharts
+  version: 2.36.0
+- name: example-client
+  repository: file://charts/example-client
+  version: 0.1.0
+digest: sha256:2fc07299219b67da2d95fa26f4aff57adf3f0977ca50f21206628fea87d05e94
+generated: "2026-03-22T21:58:16.183733+02:00"

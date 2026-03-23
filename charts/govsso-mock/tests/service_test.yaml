@@ -1,0 +1,38 @@
+# charts/govsso-mock/tests/service_test.yaml
+suite: service
+templates:
+  - templates/service.yaml
+tests:
+  - it: renders a ClusterIP Service on port 10443
+    set:
+      image.repository: testrepo
+      image.tag: "1.0"
+      tls.existingSecret: test-tls
+      idToken.existingSecret: test-id
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.type
+          value: ClusterIP
+      - equal:
+          path: spec.ports[0].port
+          value: 10443
+      - equal:
+          path: spec.ports[0].targetPort
+          value: https
+      - equal:
+          path: spec.ports[0].name
+          value: https
+
+  - it: uses NodePort when service type is overridden
+    set:
+      image.repository: testrepo
+      image.tag: "1.0"
+      tls.existingSecret: test-tls
+      idToken.existingSecret: test-id
+      service.type: NodePort
+    asserts:
+      - equal:
+          path: spec.type
+          value: NodePort

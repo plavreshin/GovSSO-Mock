@@ -1,0 +1,182 @@
+# charts/govsso-mock/values.yaml
+
+## @section Image
+## @param image.repository Container image repository (required, no default)
+## @param image.tag Container image tag
+## @param image.digest Container image digest (takes precedence over tag if set)
+## @param image.pullPolicy Image pull policy
+## @param image.pullSecrets List of image pull secret names
+image:
+  repository: ""
+  # Either tag or digest must be overridden at deploy time.
+  tag: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+## @section GovSSO-Mock application configuration
+## Rendered into config.json and mounted as a ConfigMap
+## @param config.host Domain name where the mock is served
+## @param config.serverPort TCP port where the mock is served
+## @param config.baseHref HTTP base path where the mock is served
+## @param config.idTokenSignKeyId `kid` value served at the JWKS endpoint
+config:
+  host: "govsso-mock.example.com"
+  serverPort: "10443"
+  baseHref: "/"
+  idTokenSignKeyId: "govsso-mock"
+
+## @section Preconfigured users and clients
+## Rendered into users.json and clients.json respectively
+## @param users Array of preconfigured user objects for the mock login page
+## @param clients Array of preconfigured client application objects
+users: []
+clients: []
+
+## @section TLS and ID-token signing secrets
+## Both secrets must exist in the cluster before running helm install.
+##
+## tls.existingSecret must be a TLS-type Secret with keys:
+##   tls.crt  — PEM-encoded TLS certificate
+##   tls.key  — PEM-encoded TLS private key
+##
+## idToken.existingSecret must be a generic Secret with keys:
+##   id-token-sign.key.pem  — PEM-encoded RSA private key (used for JWT signing)
+##   id-token-sign.pub.pem  — PEM-encoded RSA public key (served at JWKS endpoint)
+##
+## @param tls.existingSecret Name of existing Secret containing TLS cert/key
+## @param idToken.existingSecret Name of existing Secret containing RSA key pair
+tls:
+  existingSecret: ""
+idToken:
+  existingSecret: ""
+
+## @section Deployment
+## @param replicaCount Number of replicas
+replicaCount: 1
+
+## @section Service Account
+## @param serviceAccount.create Whether to create a ServiceAccount
+## @param serviceAccount.name Override for the ServiceAccount name
+## @param serviceAccount.annotations Annotations to add to the ServiceAccount
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+## @section Service
+## @param service.type Kubernetes Service type
+## @param service.port Service port (matches containerPort)
+service:
+  type: ClusterIP
+  port: 10443
+
+## @section Resource limits
+## @param resources CPU/memory resource requests and limits
+resources: {}
+
+## @section Pod security context
+## @param podSecurityContext.enabled Enable pod-level security context
+## @param podSecurityContext.fsGroup fsGroup for volume ownership
+podSecurityContext:
+  enabled: true
+  fsGroup: 1001
+
+## @section Container security context
+## Note: distroless/base-nossl-debian12 (non-nonroot) does not provision UID 1001,
+## but any non-zero UID satisfies runAsNonRoot since the binary has no UID requirement.
+## @param containerSecurityContext.enabled Enable container-level security context
+## @param containerSecurityContext.runAsUser UID to run the container as
+## @param containerSecurityContext.runAsNonRoot Require non-root user
+## @param containerSecurityContext.readOnlyRootFilesystem Mount root filesystem read-only
+## @param containerSecurityContext.allowPrivilegeEscalation Prevent privilege escalation
+containerSecurityContext:
+  enabled: true
+  runAsUser: 1001
+  runAsNonRoot: true
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+
+## @section Liveness probe
+## The app has no dedicated health endpoint. "/" (home page, HTTP 200) is used.
+## @param livenessProbe.enabled Enable liveness probe
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+## @section Readiness probe
+## @param readinessProbe.enabled Enable readiness probe
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+  successThreshold: 1
+
+## @section Scheduling
+## @param nodeSelector Node selector labels
+## @param tolerations Tolerations for pod scheduling
+## @param affinity Affinity rules for pod scheduling
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+## @section Extra configuration
+## @param extraEnv Extra environment variables injected into the container
+## @param extraVolumes Extra volumes added to the pod
+## @param extraVolumeMounts Extra volume mounts added to the container
+extraEnv: []
+extraVolumes: []
+extraVolumeMounts: []
+
+## @section Common labels and annotations
+## @param commonLabels Labels to add to all deployed resources
+## @param commonAnnotations Annotations to add to all deployed resources
+commonLabels: {}
+commonAnnotations: {}
+
+## @param podAnnotations Annotations to add to the pod template (e.g. for Prometheus scraping)
+podAnnotations: {}
+
+## @section Example client subchart
+## The example client (tara-govsso-exampleclient) is an optional companion
+## that demonstrates GovSSO authentication flows.
+##
+## IMPORTANT: Helm passes these values to the subchart using the key "example-client"
+## (hyphenated, matching the subchart's chart name). Use --set 'example-client.enabled=true'
+## on the command line.
+##
+## example-client.tls.existingSecret must be a generic Secret with keys:
+##   keystore.p12   — PKCS12 keystore for the example client's TLS certificate
+##   truststore.p12 — PKCS12 truststore containing the mock's CA certificate
+"example-client":
+  enabled: false
+  image:
+    repository: ghcr.io/e-gov/tara-govsso-exampleclient
+    tag: "0.7.3"
+    digest: ""
+    pullPolicy: IfNotPresent
+  clientId: "example-client-id"
+  ## Provide clientSecret inline (dev) or via existingSecret (production)
+  clientSecret: ""
+  existingSecret: ""  # Secret key: client-secret
+  govSsoIssuerUri: ""
+  redirectUri: ""
+  postLogoutRedirectUri: ""
+  tls:
+    existingSecret: ""
+    keystorePassword: "changeit"
+    truststorePassword: "changeit"
+  ## Must be "govsso" to activate GovSSO Spring profile in the example client
+  springProfile: "govsso"
+  messagesTitle: "GovSSO Client"
+  jvmThreadCount: "10"
+  service:
+    type: ClusterIP
+    port: 11443
+  resources: {}

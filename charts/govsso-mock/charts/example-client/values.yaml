@@ -1,0 +1,32 @@
+# Default values — overridden by parent chart's "example-client:" section.
+
+enabled: false
+
+image:
+  repository: ghcr.io/e-gov/tara-govsso-exampleclient
+  tag: "0.7.3"
+  digest: ""
+  pullPolicy: IfNotPresent
+
+clientId: "example-client-id"
+clientSecret: ""
+existingSecret: ""
+
+govSsoIssuerUri: ""
+redirectUri: ""
+postLogoutRedirectUri: ""
+
+tls:
+  existingSecret: ""
+  keystorePassword: "changeit"
+  truststorePassword: "changeit"
+
+springProfile: "govsso"
+messagesTitle: "GovSSO Client"
+jvmThreadCount: "10"
+
+service:
+  type: ClusterIP
+  port: 11443
+
+resources: {}

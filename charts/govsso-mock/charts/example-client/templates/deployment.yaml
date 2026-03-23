@@ -1,0 +1,76 @@
+{{/* charts/govsso-mock/charts/example-client/templates/deployment.yaml */}}
+{{- if .Values.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "example-client.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels: {{- include "example-client.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "example-client.matchLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "example-client.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: example-client
+          {{- if .Values.image.digest }}
+          image: "{{ .Values.image.repository }}@{{ .Values.image.digest }}"
+          {{- else }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: server.port
+              value: "11443"
+            - name: govsso.client-id
+              value: {{ .Values.clientId | quote }}
+            - name: govsso.client-secret
+              {{- if .Values.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecret | quote }}
+                  key: client-secret
+              {{- else }}
+              value: {{ .Values.clientSecret | quote }}
+              {{- end }}
+            - name: govsso.redirect-uri
+              value: {{ .Values.redirectUri | quote }}
+            - name: govsso.post-logout-redirect-uri
+              value: {{ .Values.postLogoutRedirectUri | quote }}
+            - name: govsso.issuer-uri
+              value: {{ .Values.govSsoIssuerUri | quote }}
+            - name: govsso.trust-store
+              value: "file:/var/local/config/tls/truststore.p12"
+            - name: govsso.trust-store-password
+              value: {{ .Values.tls.truststorePassword | quote }}
+            - name: server.ssl.key-store
+              value: "file:/var/local/config/tls/keystore.p12"
+            - name: server.ssl.key-store-type
+              value: "PKCS12"
+            - name: server.ssl.key-store-password
+              value: {{ .Values.tls.keystorePassword | quote }}
+            - name: SPRING_PROFILES_ACTIVE
+              value: {{ .Values.springProfile | quote }}
+            - name: example-client.messages.title
+              value: {{ .Values.messagesTitle | quote }}
+            - name: BPL_JVM_THREAD_COUNT
+              value: {{ .Values.jvmThreadCount | quote }}
+          ports:
+            - name: https
+              containerPort: 11443
+              protocol: TCP
+          {{- with .Values.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: tls
+              mountPath: /var/local/config/tls
+              readOnly: true
+      volumes:
+        - name: tls
+          secret:
+            secretName: {{ .Values.tls.existingSecret }}
+{{- end }}

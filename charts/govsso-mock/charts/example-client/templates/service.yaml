@@ -1,0 +1,17 @@
+{{/* charts/govsso-mock/charts/example-client/templates/service.yaml */}}
+{{- if .Values.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "example-client.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels: {{- include "example-client.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type | quote }}
+  ports:
+    - name: https
+      port: {{ .Values.service.port }}
+      targetPort: https
+      protocol: TCP
+  selector: {{- include "example-client.matchLabels" . | nindent 4 }}
+{{- end }}
