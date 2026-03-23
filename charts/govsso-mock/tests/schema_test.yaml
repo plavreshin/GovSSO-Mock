@@ -1,0 +1,62 @@
+# charts/govsso-mock/tests/schema_test.yaml
+suite: schema validation
+templates:
+  - templates/configmap.yaml  # needs any template to trigger schema validation
+tests:
+  - it: passes with all required values set
+    set:
+      image.repository: testrepo
+      image.tag: "1.0"
+      tls.existingSecret: test-tls
+      idToken.existingSecret: test-id
+    asserts:
+      - isKind:
+          of: ConfigMap
+
+  - it: uses digest instead of tag
+    set:
+      image.repository: testrepo
+      image.tag: ""
+      image.digest: "sha256:abc123def456"
+      tls.existingSecret: test-tls
+      idToken.existingSecret: test-id
+    asserts:
+      - isKind:
+          of: ConfigMap
+
+  - it: should fail when tls.existingSecret is empty
+    set:
+      image.repository: testrepo
+      image.tag: "1.0"
+      tls.existingSecret: ""
+      idToken.existingSecret: test-id
+    asserts:
+      - failedTemplate: {}
+
+  - it: should fail when idToken.existingSecret is empty
+    set:
+      image.repository: testrepo
+      image.tag: "1.0"
+      tls.existingSecret: test-tls
+      idToken.existingSecret: ""
+    asserts:
+      - failedTemplate: {}
+
+  - it: should fail when image.repository is empty
+    set:
+      image.repository: ""
+      image.tag: "1.0"
+      tls.existingSecret: test-tls
+      idToken.existingSecret: test-id
+    asserts:
+      - failedTemplate: {}
+
+  - it: should fail when both image.tag and image.digest are empty
+    set:
+      image.repository: testrepo
+      image.tag: ""
+      image.digest: ""
+      tls.existingSecret: test-tls
+      idToken.existingSecret: test-id
+    asserts:
+      - failedTemplate: {}

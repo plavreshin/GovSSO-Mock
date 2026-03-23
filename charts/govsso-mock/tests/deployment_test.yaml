@@ -1,0 +1,181 @@
+# charts/govsso-mock/tests/deployment_test.yaml
+suite: deployment
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: renders a Deployment with correct container name
+    set:
+      image.repository: testrepo
+      image.tag: "1.0"
+      tls.existingSecret: test-tls
+      idToken.existingSecret: test-id
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: govsso-mock
+
+  - it: uses the provided image repository and tag
+    set:
+      image.repository: myregistry.example.com/govsso-mock
+      image.tag: "2.0.0"
+      tls.existingSecret: test-tls
+      idToken.existingSecret: test-id
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "myregistry.example.com/govsso-mock:2.0.0"
+
+  - it: exposes named port https on 10443
+    set:
+      image.repository: testrepo
+      image.tag: "1.0"
+      tls.existingSecret: test-tls
+      idToken.existingSecret: test-id
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 10443
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].name
+          value: https
+
+  - it: mounts config files with subPath
+    set:
+      image.repository: testrepo
+      image.tag: "1.0"
+      tls.existingSecret: test-tls
+      idToken.existingSecret: test-id
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: config
+            mountPath: /govsso-mock/config/config.json
+            subPath: config.json
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: config
+            mountPath: /govsso-mock/config/users.json
+            subPath: users.json
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: config
+            mountPath: /govsso-mock/config/clients.json
+            subPath: clients.json
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: tls
+            mountPath: /govsso-mock/config/tls/govsso-mock
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: id-token
+            mountPath: /govsso-mock/config/id-token
+            readOnly: true
+
+  - it: mounts the tls secret by existingSecret name
+    set:
+      image.repository: testrepo
+      image.tag: "1.0"
+      tls.existingSecret: my-tls-secret
+      idToken.existingSecret: my-id-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: tls
+            secret:
+              secretName: my-tls-secret
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: id-token
+            secret:
+              secretName: my-id-secret
+
+  - it: applies container security context when enabled
+    set:
+      image.repository: testrepo
+      image.tag: "1.0"
+      tls.existingSecret: test-tls
+      idToken.existingSecret: test-id
+      containerSecurityContext.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+
+  - it: enables liveness probe with HTTPS scheme
+    set:
+      image.repository: testrepo
+      image.tag: "1.0"
+      tls.existingSecret: test-tls
+      idToken.existingSecret: test-id
+      livenessProbe.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.scheme
+          value: HTTPS
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: https
+
+  - it: omits liveness probe when disabled
+    set:
+      image.repository: testrepo
+      image.tag: "1.0"
+      tls.existingSecret: test-tls
+      idToken.existingSecret: test-id
+      livenessProbe.enabled: false
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].livenessProbe
+
+  - it: enables readiness probe with HTTPS scheme
+    set:
+      image.repository: testrepo
+      image.tag: "1.0"
+      tls.existingSecret: test-tls
+      idToken.existingSecret: test-id
+      readinessProbe.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.scheme
+          value: HTTPS
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: https
+
+  - it: renders commonAnnotations on deployment metadata
+    set:
+      image.repository: testrepo
+      image.tag: "1.0"
+      tls.existingSecret: test-tls
+      idToken.existingSecret: test-id
+      commonAnnotations:
+        example.com/team: platform
+    asserts:
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform

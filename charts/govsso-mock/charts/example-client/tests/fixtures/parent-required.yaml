@@ -1,0 +1,9 @@
+# Provides the parent chart's required values so that schema validation passes
+# when these subchart tests are run in the context of the parent chart.
+image:
+  repository: testrepo
+  tag: "1.0"
+tls:
+  existingSecret: test-tls
+idToken:
+  existingSecret: test-id

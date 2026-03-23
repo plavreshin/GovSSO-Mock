@@ -1,0 +1,24 @@
+apiVersion: v2
+name: govsso-mock
+description: Helm chart for deploying GovSSO-Mock to Kubernetes
+type: application
+version: 0.1.0
+appVersion: "latest"
+keywords:
+  - govsso
+  - mock
+  - oidc
+  - authentication
+home: https://github.com/e-gov/GovSSO-Mock
+sources:
+  - https://github.com/e-gov/GovSSO-Mock
+maintainers:
+  - name: GovSSO-Mock maintainers
+dependencies:
+  - name: common
+    version: 2.36.0
+    repository: oci://registry-1.docker.io/bitnamicharts
+  - name: example-client
+    version: 0.1.0
+    repository: "file://charts/example-client"
+    condition: example-client.enabled

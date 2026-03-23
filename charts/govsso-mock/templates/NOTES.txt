@@ -1,0 +1,26 @@
+{{/* charts/govsso-mock/templates/NOTES.txt */}}
+GovSSO-Mock has been deployed.
+
+  Service: {{ include "govsso-mock.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+
+IMPORTANT — Required secrets must exist before the pod can start:
+
+  tls.existingSecret: {{ .Values.tls.existingSecret | default "(NOT SET — chart validation should have caught this)" }}
+    Required keys:
+      tls.crt  — PEM-encoded TLS certificate
+      tls.key  — PEM-encoded TLS private key
+
+  idToken.existingSecret: {{ .Values.idToken.existingSecret | default "(NOT SET)" }}
+    Required keys:
+      id-token-sign.key.pem  — PEM-encoded RSA private key (JWT signing)
+      id-token-sign.pub.pem  — PEM-encoded RSA public key (JWKS endpoint)
+
+{{- if index .Values "example-client" | dig "enabled" false }}
+
+Example client is ENABLED.
+  Service: {{ .Release.Name }}-example-client.{{ .Release.Namespace }}.svc.cluster.local:11443
+
+  example-client.tls.existingSecret must contain:
+    keystore.p12   — PKCS12 keystore for the example client TLS certificate
+    truststore.p12 — PKCS12 truststore containing the mock's CA certificate
+{{- end }}

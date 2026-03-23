@@ -1,0 +1,115 @@
+# charts/govsso-mock/charts/example-client/tests/deployment_test.yaml
+suite: example-client deployment
+templates:
+  - templates/deployment.yaml
+values:
+  - fixtures/parent-required.yaml
+tests:
+  - it: renders Deployment when enabled
+    set:
+      enabled: true
+      govSsoIssuerUri: https://govsso-mock.example.com/
+      redirectUri: https://client.example.com/login/oauth2/code/govsso
+      postLogoutRedirectUri: https://client.example.com/
+      tls.existingSecret: client-tls
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: example-client
+
+  - it: uses repository and tag for image when digest is not set
+    set:
+      enabled: true
+      govSsoIssuerUri: https://govsso-mock.example.com/
+      redirectUri: https://client.example.com/callback
+      postLogoutRedirectUri: https://client.example.com/
+      tls.existingSecret: client-tls
+      image.repository: myrepo/example-client
+      image.tag: "2.0"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "myrepo/example-client:2.0"
+
+  - it: uses digest when image.digest is set
+    set:
+      enabled: true
+      govSsoIssuerUri: https://govsso-mock.example.com/
+      redirectUri: https://client.example.com/callback
+      postLogoutRedirectUri: https://client.example.com/
+      tls.existingSecret: client-tls
+      image.repository: myrepo/example-client
+      image.digest: "sha256:abc123def456"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "myrepo/example-client@sha256:abc123def456"
+
+  - it: sets SPRING_PROFILES_ACTIVE to govsso by default
+    set:
+      enabled: true
+      govSsoIssuerUri: https://govsso-mock.example.com/
+      redirectUri: https://client.example.com/callback
+      postLogoutRedirectUri: https://client.example.com/
+      tls.existingSecret: client-tls
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPRING_PROFILES_ACTIVE
+            value: "govsso"
+
+  - it: sets govsso.issuer-uri env var from values
+    set:
+      enabled: true
+      govSsoIssuerUri: https://my-govsso.example.com/
+      redirectUri: https://client.example.com/callback
+      postLogoutRedirectUri: https://client.example.com/
+      tls.existingSecret: client-tls
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: govsso.issuer-uri
+            value: "https://my-govsso.example.com/"
+
+  - it: uses secretKeyRef for client-secret when existingSecret is set
+    set:
+      enabled: true
+      govSsoIssuerUri: https://govsso-mock.example.com/
+      redirectUri: https://client.example.com/callback
+      postLogoutRedirectUri: https://client.example.com/
+      tls.existingSecret: client-tls
+      existingSecret: my-client-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: govsso.client-secret
+            valueFrom:
+              secretKeyRef:
+                name: my-client-secret
+                key: client-secret
+
+  - it: mounts tls secret at correct path
+    set:
+      enabled: true
+      govSsoIssuerUri: https://govsso-mock.example.com/
+      redirectUri: https://client.example.com/callback
+      postLogoutRedirectUri: https://client.example.com/
+      tls.existingSecret: my-client-tls
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: tls
+            mountPath: /var/local/config/tls
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: tls
+            secret:
+              secretName: my-client-tls

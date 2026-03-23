@@ -1,0 +1,73 @@
+# charts/govsso-mock/tests/configmap_test.yaml
+suite: configmap
+templates:
+  - templates/configmap.yaml
+tests:
+  - it: renders a ConfigMap with three data keys
+    set:
+      image.repository: testrepo
+      image.tag: "1.0"
+      tls.existingSecret: test-tls
+      idToken.existingSecret: test-id
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: data["users.json"]
+          value: "[]"
+      - equal:
+          path: data["clients.json"]
+          value: "[]"
+      - matchRegex:
+          path: data["config.json"]
+          pattern: '"host"'
+      - matchRegex:
+          path: data["config.json"]
+          pattern: '"tlsCertificate"'
+      - matchRegex:
+          path: data["config.json"]
+          pattern: '"idTokenSignKeyId"'
+
+  - it: embeds config.host from values
+    set:
+      image.repository: testrepo
+      image.tag: "1.0"
+      tls.existingSecret: test-tls
+      idToken.existingSecret: test-id
+      config.host: my-govsso.example.com
+    asserts:
+      - matchRegex:
+          path: data["config.json"]
+          pattern: '"host":\s*"my-govsso\.example\.com"'
+
+  - it: embeds users array from values
+    set:
+      image.repository: testrepo
+      image.tag: "1.0"
+      tls.existingSecret: test-tls
+      idToken.existingSecret: test-id
+      users:
+        - sub: EE38001085718
+          given_name: Jaak-Kristjan
+          family_name: Joeorg
+          birthdate: "1980-01-08"
+          amr: idcard
+          acr: high
+    asserts:
+      - matchRegex:
+          path: data["users.json"]
+          pattern: "EE38001085718"
+
+  - it: hardcodes tls cert path in config.json
+    set:
+      image.repository: testrepo
+      image.tag: "1.0"
+      tls.existingSecret: test-tls
+      idToken.existingSecret: test-id
+    asserts:
+      - matchRegex:
+          path: data["config.json"]
+          pattern: 'config/tls/govsso-mock/tls\.crt'
+      - matchRegex:
+          path: data["config.json"]
+          pattern: 'config/id-token/id-token-sign\.key\.pem'

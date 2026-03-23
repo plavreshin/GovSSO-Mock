@@ -1,0 +1,113 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["image", "tls", "idToken"],
+  "properties": {
+    "image": {
+      "type": "object",
+      "required": ["repository"],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Container image repository. Required — no default is provided."
+        },
+        "tag": {
+          "type": "string",
+          "description": "Image tag. Either tag or digest must be non-empty."
+        },
+        "digest": {
+          "type": "string",
+          "description": "Image digest (sha256:...). Takes precedence over tag if non-empty."
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"]
+        },
+        "pullSecrets": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "anyOf": [
+        {"properties": {"tag": {"minLength": 1}}, "required": ["tag"]},
+        {"properties": {"digest": {"minLength": 1}}, "required": ["digest"]}
+      ]
+    },
+    "tls": {
+      "type": "object",
+      "required": ["existingSecret"],
+      "properties": {
+        "existingSecret": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name of existing Secret. Required keys: tls.crt, tls.key"
+        }
+      }
+    },
+    "idToken": {
+      "type": "object",
+      "required": ["existingSecret"],
+      "properties": {
+        "existingSecret": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name of existing Secret. Required keys: id-token-sign.key.pem, id-token-sign.pub.pem"
+        }
+      }
+    },
+    "replicaCount": { "type": "integer", "minimum": 0 },
+    "config": {
+      "type": "object",
+      "properties": {
+        "host":              { "type": "string" },
+        "serverPort":        { "type": "string" },
+        "baseHref":          { "type": "string" },
+        "idTokenSignKeyId":  { "type": "string" }
+      }
+    },
+    "users":   { "type": "array" },
+    "clients": { "type": "array" },
+    "serviceAccount": {
+      "type": "object",
+      "properties": {
+        "create":      { "type": "boolean" },
+        "name":        { "type": "string" },
+        "annotations": { "type": "object" }
+      }
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+        "port": { "type": "integer" }
+      }
+    },
+    "example-client": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" }
+      },
+      "if": {
+        "properties": { "enabled": { "const": true } },
+        "required": ["enabled"]
+      },
+      "then": {
+        "required": ["clientId", "govSsoIssuerUri", "redirectUri", "postLogoutRedirectUri", "tls"],
+        "properties": {
+          "clientId":                { "type": "string", "minLength": 1 },
+          "govSsoIssuerUri":         { "type": "string", "minLength": 1 },
+          "redirectUri":             { "type": "string", "minLength": 1 },
+          "postLogoutRedirectUri":   { "type": "string", "minLength": 1 },
+          "tls": {
+            "type": "object",
+            "required": ["existingSecret"],
+            "properties": {
+              "existingSecret": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

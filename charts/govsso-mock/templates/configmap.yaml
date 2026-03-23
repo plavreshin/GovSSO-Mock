@@ -1,0 +1,27 @@
+{{/* charts/govsso-mock/templates/configmap.yaml */}}
+{{- include "govsso-mock.validateRequiredValues" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "govsso-mock.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels: {{- include "govsso-mock.labels" . | nindent 4 }}
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "common.tplvalues.render" (dict "value" .Values.commonAnnotations "context" $) | nindent 4 }}
+  {{- end }}
+data:
+  config.json: |-
+{{ dict
+    "host"                     .Values.config.host
+    "serverPort"               .Values.config.serverPort
+    "baseHref"                 .Values.config.baseHref
+    "tlsCertificate"           "config/tls/govsso-mock/tls.crt"
+    "tlsPrivateKey"            "config/tls/govsso-mock/tls.key"
+    "idTokenSignPrivateKeyPath" "config/id-token/id-token-sign.key.pem"
+    "idTokenSignPublicKeyPath"  "config/id-token/id-token-sign.pub.pem"
+    "idTokenSignKeyId"         .Values.config.idTokenSignKeyId
+  | toJson | indent 4 }}
+  users.json: |-
+{{ .Values.users | toJson | indent 4 }}
+  clients.json: |-
+{{ .Values.clients | toJson | indent 4 }}

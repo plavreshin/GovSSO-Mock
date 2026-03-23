@@ -1,0 +1,18 @@
+{{/* charts/govsso-mock/templates/service.yaml */}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "govsso-mock.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels: {{- include "govsso-mock.labels" . | nindent 4 }}
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "common.tplvalues.render" (dict "value" .Values.commonAnnotations "context" $) | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type | quote }}
+  ports:
+    - name: https
+      port: {{ .Values.service.port }}
+      targetPort: https
+      protocol: TCP
+  selector: {{- include "govsso-mock.matchLabels" . | nindent 4 }}
